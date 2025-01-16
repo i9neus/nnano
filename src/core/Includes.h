@@ -14,12 +14,6 @@
 #include <exception>
 #include "thirdparty/tinyformat/tinyformat.h"
 
-#define FLAIR_ENABLE_MULTITHREADING
-
-#ifdef __EMSCRIPTEN__
-#undef FLAIR_ENABLE_MULTITHREADING
-#endif
-
 namespace NNano
 {
 
