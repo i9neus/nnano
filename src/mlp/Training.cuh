@@ -1,8 +1,8 @@
 #pragma once
 
 #include "LinearSequential.cuh"
-#include "../Loss.cuh"
-#include "core/utils/cuda/CudaVector.cuh"
+#include "../nn/Loss.cuh"
+#include "../core/cuda/CudaVector.cuh"
 
 namespace NNano
 {
@@ -128,9 +128,7 @@ namespace NNano
                     {
                         *kernelData.miniBatchLoss = kernelData.sampleLosses[0] / N;
                     }
-                }              
-                 
-                //if(paramIdx == 0) printf("%i: %f\n", stride, kernelData.mlpGradData[destIdx * Policy::Model::kNumParams + paramIdx]);
+                }      
             }
         }
 
@@ -169,38 +167,23 @@ namespace NNano
         template<typename Policy>
         struct MLPTrainer<ComputeDevice::kCUDA, Policy>
         {
-            __host__ static void EstimateGradients(TrainingKernelData<Policy> kernelData, const int miniBatchOffset)
+            __host__ static void EstimateGradients(TrainingKernelData<Policy> kernelData, const int miniBatchOffset, cudaStream_t& stream)
             {
                 //Cuda::Vector<TrainingCtx<Policy>> ctx(ComputeDevice::kCUDA, Policy::Hyper::kMiniBatchSize);
                 
                 // Estimate the gradients for each element in the mini-batch
                 AssertFmt(Policy::Model::kMaxConcurrency <= 1024, "Exceeded block limit of 1024 threads");
-                EstimateGradientsKernel << < Policy::Hyper::kMiniBatchSize, Policy::Model::kMaxConcurrency >> > (kernelData, miniBatchOffset);// , ctx.GetComputeData());
+                EstimateGradientsKernel << < Policy::Hyper::kMiniBatchSize, Policy::Model::kMaxConcurrency, stream >> > (kernelData, miniBatchOffset);// , ctx.GetComputeData());
                 //IsOk(cudaGetLastError());
 
                 const int kMiniBatchSize = std::min(int(Policy::Hyper::kMiniBatchSize), kernelData.batchSize - miniBatchOffset);
-                ReduceLossKernel << < 1, kMiniBatchSize >> > (kernelData);
-
-                // Reduce the gradients
-                /*constexpr int kMiniBatchSize = Policy::Hyper::kMiniBatchSize;
-                if (kMiniBatchSize > 1)
-                {
-                    for (int stride = 2; stride <= kMiniBatchSize; stride <<= 1)
-                    {
-                        constexpr int kNumThreads = 256;
-                        const int kNumParams = Policy::Model::kNumParams * kMiniBatchSize / stride;
-                        const int kNumBlocks = (kNumParams + kNumThreads - 1) / kNumThreads;
-
-                        ReduceGradientsKernel << <kNumBlocks, kNumThreads >> > (kernelData, stride, miniBatchOffset);
-                        IsOk(cudaGetLastError());
-                    }
-                }*/
+                ReduceLossKernel << < 1, kMiniBatchSize, stream >> > (kernelData);
             }
 
-            __host__ static void PrepareNewEpoch(TrainingKernelData<Policy> kernelData)
+            __host__ static void PrepareNewEpoch(TrainingKernelData<Policy> kernelData, cudaStream_t& stream)
             {
                 AssertFmt(Policy::Hyper::kMiniBatchSize <= 1024, "Exceeded block limit of 1024 threads");
-                PrepareNewEpochKernel << < 1, Policy::Hyper::kMiniBatchSize >> > (kernelData);
+                PrepareNewEpochKernel << < 1, Policy::Hyper::kMiniBatchSize, stream >> > (kernelData);
                 IsOk(cudaGetLastError());
             }
         };

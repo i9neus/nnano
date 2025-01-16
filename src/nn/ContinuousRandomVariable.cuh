@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/math/MathUtils.h"
-#include "core/utils/cuda/CudaUtils.cuh"
-#include "core/utils/ConsoleUtils.h"
+#include "../core/math/MathUtils.h"
+#include "../core/cuda/CudaUtils.cuh"
+#include "../core/utils/ConsoleUtils.h"
 #include <random>
 
 namespace NNano

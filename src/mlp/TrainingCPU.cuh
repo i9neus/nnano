@@ -57,7 +57,7 @@ namespace NNano
             }
 
         public:
-            __host__ static void EstimateGradients(TrainingKernelData<Policy> kernelData, const int miniBatchOffset)
+            __host__ static void EstimateGradients(TrainingKernelData<Policy> kernelData, const int miniBatchOffset, cudaStream_t&)
             {
                 using Model = typename Policy::Model;
                 
@@ -80,7 +80,7 @@ namespace NNano
                 *kernelData.miniBatchLoss /= miniBatchSize;
             }
 
-            __host__ static void PrepareNewEpoch(TrainingKernelData<Policy> kernelData)
+            __host__ static void PrepareNewEpoch(TrainingKernelData<Policy> kernelData, cudaStream_t&)
             {
                 kernelData.miniBatchLoss = 0;
                 for (int sampleIdx = 0; sampleIdx < Policy::Hyper::kMiniBatchSize; ++sampleIdx)

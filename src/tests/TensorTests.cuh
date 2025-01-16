@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/utils/cuda/CudaUtils.cuh"
+#include "../core/cuda/CudaUtils.cuh"
 
 namespace NNano
 {

@@ -1,12 +1,12 @@
 #include "TensorTests.cuh"
 
-#include "core/nn/Tensor1D.cuh"
-#include "core/nn/Tensor2D.cuh"
-#include "core/nn/TensorOps.cuh"
-#include "core/utils/cuda/CudaObject.cuh"
-#include "core/utils/ConsoleUtils.h"
-#include "core/nn/mlp/LinearSequential.cuh"
-#include "core/nn/ContinuousRandomVariable.cuh"
+#include "../core/math/Tensor1D.cuh"
+#include "../core/math/Tensor2D.cuh"
+#include "../core/math/TensorOps.cuh"
+#include "../core/cuda/CudaObject.cuh"
+#include "../core/utils/ConsoleUtils.h"
+#include "../mlp/LinearSequential.cuh"
+#include "../nn/ContinuousRandomVariable.cuh"
 
 namespace NNano
 {        

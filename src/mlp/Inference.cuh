@@ -54,11 +54,11 @@ namespace NNano
         template<typename Policy>
         struct MLPInferer<ComputeDevice::kCUDA, Policy>
         {
-            __host__ static void InferBatch(InferenceKernelData<Policy> kernelData)
+            __host__ static void InferBatch(InferenceKernelData<Policy> kernelData, cudaStream_t& stream)
             {
                 constexpr int kNumThreads = Policy::Model::kMaxConcurrency;
                 AssertFmt(kNumThreads <= 1024, "Exceeded block limit of 1024 threads");
-                InferBatchKernel<kNumThreads> << < Policy::Hyper::kMiniBatchSize, kNumThreads >> > (kernelData);
+                InferBatchKernel<kNumThreads> << < Policy::Hyper::kMiniBatchSize, kNumThreads, stream >> > (kernelData);
                 IsOk(cudaGetLastError());
             }
         };
@@ -66,7 +66,7 @@ namespace NNano
         template<typename Policy>
         struct MLPInferer<ComputeDevice::kCPU, Policy>
         {
-            __host__ static void InferBatch(InferenceKernelData<Policy> kernelData)
+            __host__ static void InferBatch(InferenceKernelData<Policy> kernelData, cudaStream_t&)
             {
                 // Copy MLP weight data into the context
                 TrainingCtx<Policy> ctx;

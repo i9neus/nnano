@@ -1,8 +1,8 @@
 #pragma once
 
 //#include "NNUtils.cuh"
-#include "core/utils/cuda/CudaVector.cuh"
-#include "core/math/MathUtils.h"
+#include "../core/cuda/CudaVector.cuh"
+#include "../core/math/MathUtils.h"
 #include <random>
 #include <set>
 

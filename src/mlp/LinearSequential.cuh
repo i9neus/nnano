@@ -1,10 +1,10 @@
 #pragma once
 
 #include "Ctx.cuh"
-#include "../Activation.cuh"
-#include "core/utils/TemplateUtils.h"
+#include "../nn/Activation.cuh"
+#include "../core/utils/TemplateUtils.h"
 #include <functional>
-#include "../ParameterInitialiser.cuh"
+#include "../nn/ParameterInitialiser.cuh"
 
 namespace NNano
 {

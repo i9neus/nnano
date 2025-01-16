@@ -5,7 +5,7 @@
 #include "helper_cuda.h"
 #include "device_launch_parameters.h"
 
-#include "core/Includes.h"
+#include "../core/Includes.h"
 #include <type_traits>
 #include <math.h>
 

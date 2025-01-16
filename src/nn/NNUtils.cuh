@@ -1,9 +1,9 @@
 #pragma once
 
-#include "core/utils/cuda/CudaUtils.cuh"
-#include "core/utils/ConsoleUtils.h"
+#include "../core/cuda/CudaUtils.cuh"
+#include "../core/utils/ConsoleUtils.h"
 #include "thirdparty/tinyformat/tinyformat.h"
-#include "core/math/MathUtils.h"
+#include "../core/math/MathUtils.h"
 
 namespace NNano
 {
