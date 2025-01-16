@@ -1,7 +1,7 @@
 #pragma once
 
 #include "NNUtils.cuh"
-#include "core/math/MathUtils.h"
+#include "../core/math/MathUtils.h"
 #include "Activation.cuh"
 
 namespace NNano

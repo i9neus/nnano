@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../core/cuda/CudaUtils.cuh"
-#include "../core/utils/ConsoleUtils.h"
-#include "../core/math/Tensor2D.cuh"
-#include "../core/math/TensorOps.cuh"
+#include "../../core/cuda/CudaUtils.cuh"
+#include "../../core/utils/ConsoleUtils.h"
+#include "../../core/math/Tensor2D.cuh"
+#include "../../core/math/TensorOps.cuh"
 #include <ratio>
 #include <type_traits>
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "NNUtils.cuh"
+#include "../nn/NNUtils.cuh"
 
 namespace NNano
 {

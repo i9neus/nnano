@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CudaUtils.cuh"
-#include "core/utils/ConsoleUtils.h"
+#include "../utils/ConsoleUtils.h"
 
 namespace NNano
 {

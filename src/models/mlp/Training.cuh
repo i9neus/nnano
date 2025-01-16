@@ -1,8 +1,8 @@
 #pragma once
 
 #include "LinearSequential.cuh"
-#include "../nn/Loss.cuh"
-#include "../core/cuda/CudaVector.cuh"
+#include "../../nn/Loss.cuh"
+#include "../../core/cuda/CudaVector.cuh"
 
 namespace NNano
 {

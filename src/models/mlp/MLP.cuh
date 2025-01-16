@@ -1,19 +1,19 @@
 #pragma once
+#include "../../core/cuda/CudaObject.cuh"
+#include "../../core/cuda/CudaVector.cuh"
+#include "../../core/math/MathUtils.h"
+#include "../../core/math/TensorOps.cuh"
+#include "../../core/utils/HighResTimer.h"
+#include "../../core/utils/IOUtils.h"
+#include "../../nn/Permute.cuh"
+#include "../../nn/Activation.cuh"
+#include "../Model.cuh"
 
-#include "../core/cuda/CudaObject.cuh"
-#include "../core/cuda/CudaVector.cuh"
-#include "../core/math/MathUtils.h"
-#include "../core/math/TensorOps.cuh"
 #include "MLP.cuh"
-#include "../core/utils/HighResTimer.h"
-#include "../core/utils/IOUtils.h"
-#include "../nn/Permute.cuh"
-#include "../nn/Accessor.cuh"
 #include "Training.cuh"
 #include "TrainingCPU.cuh"
 #include "Inference.cuh"
 #include "Optimiser.cuh"
-#include "../nn/Activation.cuh"
 
 #include <fstream>
 #include <thread>
@@ -27,18 +27,13 @@ namespace NNano
     namespace NN
     {
         template<typename Model, typename ModelInitialiser, typename ActivationFunction, typename LossFunction, typename OptimiserFunction, int MiniBatchSize = 128, ComputeDevice TargetDevice = ComputeDevice::kCUDA>
-        class MLP
+        class MLP : ModelInterface<Tensor1D<Model::kInputWidth>, Tensor1D<Model::kOutputWidth>>
         {
         public:
-            enum : int
-            {
-                kMiniBatchSize = MiniBatchSize
-            };
-
-            using InputSample = Tensor1D<Model::kInputWidth, false>;
-            using OutputSample = Tensor1D<Model::kOutputWidth, false>;
+            using InputSample = Tensor1D<Model::kInputWidth>;
+            using OutputSample = Tensor1D<Model::kOutputWidth>;
             using Evaluator = LinearSequentialEvaluator<TargetDevice, Model>;
-            using Policy = MLPPolicy<TargetDevice, Model, Evaluator, HyperParameters<kMiniBatchSize, ActivationFunction, LossFunction, OptimiserFunction>>;
+            using Policy = MLPPolicy<TargetDevice, Model, Evaluator, HyperParameters<MiniBatchSize, ActivationFunction, LossFunction, OptimiserFunction>>;
             using Trainer = MLPTrainer<TargetDevice, Policy>;
 
             using ReadBatchFunctor = std::function<bool(std::vector<InputSample>&, const int)>;
@@ -46,6 +41,7 @@ namespace NNano
 
             enum : size_t
             {
+                kMiniBatchSize = MiniBatchSize,
                 kSharedMemorySafeMargin = 1024,
                 kMaxMiniBatches = std::numeric_limits<int>::max()
             }
@@ -84,7 +80,7 @@ namespace NNano
                 cudaStreamDestroy(m_cudaStream);
             }
 
-            void ResetTraining()
+            virtual void ResetTraining() override final
             {
                 m_computeGradData.reset();
                 m_computeOutputSamples.reset();
@@ -97,22 +93,21 @@ namespace NNano
                 m_totalTrainingTime = 0;
             }
 
-            void PrepareTraining(const std::vector<InputSample>& hostInputSamples, const std::vector<OutputSample>& hostTargetSamples)
+            virtual void PrepareTraining(const std::vector<InputSample>& hostInputSamples, const std::vector<OutputSample>& hostTargetSamples) override final
             {
-                AssertFmt(hostInputSamples.size() == hostTargetSamples.size(), "Size of input and target sample arrays does not match (%i and %i)", hostInputSamples.size(), hostTargetSamples.size());
+                AssertFmt(hostInputSamples.size() == hostTargetSamples.size(), "Size of input and target sample arrays does not match (%i != %i)", hostInputSamples.size(), hostTargetSamples.size());
 
                 const size_t ctxSize = sizeof(TrainingCtx<Policy>);
                 cudaDeviceProp prop;
                 IsOk(cudaGetDeviceProperties(&prop, 0));
-
                 AssertFmt(ctxSize < prop.sharedMemPerBlock - kSharedMemorySafeMargin, "Model context exceeds capacity of shared memory.");
 
                 printf_red("TrainingCtx: %i bytes\n", ctxSize);
                 printf_red("Model size: %i parameters\n", Model::kNumParams);
 
-                m_computeGradData.reset(new Cuda::Vector<float>(TargetDevice, kMiniBatchSize * Policy::Model::kNumParams, 0.f));
+                m_computeGradData.reset(new Cuda::Vector<float>(TargetDevice, MiniBatchSize * Policy::Model::kNumParams, 0.f));
                 m_computeOutputSamples.reset(Cuda::Vector<OutputSample>(TargetDevice, hostInputSamples.size()));
-                m_computeSampleLosses.reset(Cuda::Vector<float>(TargetDevice, kMiniBatchSize));
+                m_computeSampleLosses.reset(Cuda::Vector<float>(TargetDevice, MiniBatchSize));
                 m_computeMiniBatchLoss.reset(Cuda::Object<float>(TargetDevice));
 
                 // Determininstically initialise the mini-batch weights and the optimiser 
@@ -148,7 +143,7 @@ namespace NNano
                 m_kernelData.batchSize = hostInputSamples.size();
             }
 
-            void TrainEpoch()
+            virtual void TrainEpoch() override final
             {
                 AssertFmt(m_computeGradData, "Training has not been initialised. Called PrepareTraining() first.");
                 
@@ -158,7 +153,7 @@ namespace NNano
                 
                 float meanLoss = 0;
                 int miniBatchIdx = 0;
-                for (int sampleIdx = 0; sampleIdx < kernelData.batchSize && miniBatchIdx < kMaxMiniBatches; sampleIdx += kMiniBatchSize, ++miniBatchIdx)
+                for (int sampleIdx = 0; sampleIdx < kernelData.batchSize && miniBatchIdx < kMaxMiniBatches; sampleIdx += MiniBatchSize, ++miniBatchIdx)
                 {
                     computeGradData.Fill(0.f);
 
@@ -178,30 +173,30 @@ namespace NNano
                 }
                 
                 // Record the epoch loss
-                meanLoss /= std::ceil(kernelData.batchSize / float(kMiniBatchSize));
+                meanLoss /= std::ceil(kernelData.batchSize / float(MiniBatchSize));
                 m_epochLoss.emplace_back(miniBatchIdx, meanLoss);
                 m_totalTrainingTime += m_kernelTimer.Get();
                 ++m_numEpochs;
             }
 
-            void PrepareInference(const int inferBatchSize)
+            virtual void PrepareInference(const int inferBatchSize) override final
             {
                 m_computeInputSamples.reset(new Cuda::Vector<InputSample>(TargetDevice, inferBatchSize));
                 m_computeOutputSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice, inferBatchSize));
             }
 
-            void ResetInference()
+            virtual void ResetInference() override final
             {
                 m_computeInputSamples.reset();
                 m_computeOutputSamples.reset();
 
                 std::vector<InputSample> hostInputSamples;
                 std::vector<OutputSample> hostOutputSamples;
-                hostInputSamples.reserve(kMiniBatchSize);
-                hostOutputSamples.reserve(kMiniBatchSize);
+                hostInputSamples.reserve(MiniBatchSize);
+                hostOutputSamples.reserve(MiniBatchSize);
             }
 
-            void Infer(Accessor& accessor)
+            virtual void Infer(DataAccessor<InputSample, OutputSample>& accessor) override final
             {
                 AssertFmt(!m_computeModelData->IsEmpty(), "Model has not been initialised. Run a training cycle or load pre-trained weights first.");
                 AssertFmt(m_computeInputSamples, "Inference has not been initialised. Call PrepareInference() first. ");
@@ -215,7 +210,7 @@ namespace NNano
                 {          
                     // Load a batch of samples from the accessor
                     hostInputSamples.clear();
-                    for (int batchIdx = 0; batchIdx < kMiniBatchSize && sampleIdx + batchIdx < accessor.Size(); ++batchIdx)
+                    for (int batchIdx = 0; batchIdx < MiniBatchSize && sampleIdx + batchIdx < accessor.Size(); ++batchIdx)
                     {
                         hostInputSamples.push_back(accessor.Load(sampleIdx + batchIdx));
                     }

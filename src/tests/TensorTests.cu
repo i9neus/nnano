@@ -5,7 +5,7 @@
 #include "../core/math/TensorOps.cuh"
 #include "../core/cuda/CudaObject.cuh"
 #include "../core/utils/ConsoleUtils.h"
-#include "../mlp/LinearSequential.cuh"
+#include "../models/mlp/LinearSequential.cuh"
 #include "../nn/ContinuousRandomVariable.cuh"
 
 namespace NNano

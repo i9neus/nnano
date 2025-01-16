@@ -4,7 +4,6 @@
 
 namespace Enso
 {
-
     template<int Idx> __host__ __device__ __forceinline__ float GetHaltonCRPrime() { return 0.0f; }
     template<> __host__ __device__ __forceinline__ float GetHaltonCRPrime<0>() { return 1.0f; }
     template<> __host__ __device__ __forceinline__ float GetHaltonCRPrime<1>() { return 2.0f; }
@@ -12,14 +11,14 @@ namespace Enso
     template<> __host__ __device__ __forceinline__ float GetHaltonCRPrime<3>() { return 5.0f; }
 
     template<int Base>
-    __host__ __device__ __forceinline__ float HaltonBase(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase(uint32_t seed)
     {
         return 0;
     }
 
     // Samples the radix-2 Halton sequence from seed value, i
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<0>(uint i)
+    __host__ __device__ __forceinline__ float HaltonBase<0>(uint32_t i)
     {
         i = ((i & 0xffffu) << 16u) | (i >> 16u);
         i = ((i & 0x00ff00ffu) << 8u) | ((i & 0xff00ff00u) >> 8u);
@@ -30,9 +29,9 @@ namespace Enso
     }
 
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<2>(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase<2>(uint32_t seed)
     {
-        uint accum = 0u;
+        uint32_t accum = 0u;
         accum += 1162261467u * (seed % 3u); seed /= 3u;
         accum += 387420489u * (seed % 3u); seed /= 3u;
         accum += 129140163u * (seed % 3u); seed /= 3u;
@@ -56,9 +55,9 @@ namespace Enso
     }
 
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<1>(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase<1>(uint32_t seed)
     {
-        uint accum = 0u;
+        uint32_t accum = 0u;
         accum += 244140625u * (seed % 5u); seed /= 5u;
         accum += 48828125u * (seed % 5u); seed /= 5u;
         accum += 9765625u * (seed % 5u); seed /= 5u;
@@ -75,9 +74,9 @@ namespace Enso
     }
 
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<3>(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase<3>(uint32_t seed)
     {
-        uint accum = 0u;
+        uint32_t accum = 0u;
         accum += 282475249u * (seed % 7u); seed /= 7u;
         accum += 40353607u * (seed % 7u); seed /= 7u;
         accum += 5764801u * (seed % 7u); seed /= 7u;
@@ -92,9 +91,9 @@ namespace Enso
     }
 
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<4>(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase<4>(uint32_t seed)
     {
-        uint accum = 0u;
+        uint32_t accum = 0u;
         accum += 214358881u * (seed % 11u); seed /= 11u;
         accum += 19487171u * (seed % 11u); seed /= 11u;
         accum += 1771561u * (seed % 11u); seed /= 11u;
@@ -107,9 +106,9 @@ namespace Enso
     }
 
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<5>(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase<5>(uint32_t seed)
     {
-        uint accum = 0u;
+        uint32_t accum = 0u;
         accum += 62748517u * (seed % 13u); seed /= 13u;
         accum += 4826809u * (seed % 13u); seed /= 13u;
         accum += 371293u * (seed % 13u); seed /= 13u;
@@ -121,9 +120,9 @@ namespace Enso
     }
 
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<6>(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase<6>(uint32_t seed)
     {
-        uint accum = 0u;
+        uint32_t accum = 0u;
         accum += 24137569u * (seed % 17u); seed /= 17u;
         accum += 1419857u * (seed % 17u); seed /= 17u;
         accum += 83521u * (seed % 17u); seed /= 17u;
@@ -134,9 +133,9 @@ namespace Enso
     }
 
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<7>(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase<7>(uint32_t seed)
     {
-        uint accum = 0u;
+        uint32_t accum = 0u;
         accum += 47045881u * (seed % 19u); seed /= 19u;
         accum += 2476099u * (seed % 19u); seed /= 19u;
         accum += 130321u * (seed % 19u); seed /= 19u;
@@ -147,9 +146,9 @@ namespace Enso
     }
 
     template<>
-    __host__ __device__ __forceinline__ float HaltonBase<8>(uint seed)
+    __host__ __device__ __forceinline__ float HaltonBase<8>(uint32_t seed)
     {
-        uint accum = 0u;
+        uint32_t accum = 0u;
         accum += 148035889u * (seed % 23u); seed /= 23u;
         accum += 6436343u * (seed % 23u); seed /= 23u;
         accum += 279841u * (seed % 23u); seed /= 23u;
@@ -160,20 +159,20 @@ namespace Enso
     }
 
     template<int Idx, int B0>
-    __host__ __device__  __forceinline__  void HaltonImpl(const uint seed, float* data)
+    __host__ __device__  __forceinline__  void HaltonImpl(const uint32_t seed, float* data)
     {
         data[Idx] = fmodf(HaltonBase<B0>(seed) + GetHaltonCRPrime<B0>() * float(seed) / float(0xffffffffu), 1.0f);
     }
 
     template<int Idx, int B0, int B1, int... Pack>
-    __host__ __device__  __forceinline__  void HaltonImpl(const uint seed, float* data)
+    __host__ __device__  __forceinline__  void HaltonImpl(const uint32_t seed, float* data)
     {
         data[Idx] = fmodf(HaltonBase<B0>(seed) + GetHaltonCRPrime<B0>() * float(seed) / float(0xffffffffu), 1.0f);
         HaltonImpl<Idx + 1, B1, Pack...>(seed, data);
     }
 
     template<typename T, int... Pack>
-    __host__ __device__  __forceinline__ T Halton(const uint seed)
+    __host__ __device__  __forceinline__ T Halton(const uint32_t seed)
     {
         T v;
         HaltonImpl<0, Pack...>(seed, v.data);
@@ -181,7 +180,7 @@ namespace Enso
     }
 
     template<int Base>
-    __host__ __device__  __forceinline__ float Halton(const uint seed)
+    __host__ __device__  __forceinline__ float Halton(const uint32_t seed)
     {
         return fmodf(HaltonBase<Base>(seed) + GetHaltonCRPrime<Base>() * float(seed) / float(0xffffffffu), 1.0f);
     }
