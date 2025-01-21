@@ -28,6 +28,6 @@ namespace NNano
 
         __host__ virtual void ResetInference() = 0;
         __host__ virtual void PrepareInference(const int inferBatchSize) = 0;
-        __host__ virtual void void Infer(DataAccessor<InputSample, OutputSample>& accessor) = 0;
+        __host__ virtual void Infer(DataAccessor<InputSample, OutputSample>& accessor) = 0;
     };
 }

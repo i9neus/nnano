@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Tensor1D.cuh"
-#include "../nn/ListUtils.cuh"
+#include "../../nn/ListUtils.cuh"
 
 namespace NNano
 {    
