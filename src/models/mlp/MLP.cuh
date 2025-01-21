@@ -76,9 +76,12 @@ namespace NNano
         cudaStream_t                                    m_cudaStream;
         HighResTimer                                    m_kernelTimer;
 
+        DataAccessor<InputSample, OutputSample>&        m_accessor;
+
     public:
-        MLP() : 
-            m_computeModelData(new Cuda::Vector<float>(TargetDevice))
+        MLP(DataAccessor<InputSample, OutputSample>& accessor) :
+            m_computeModelData(new Cuda::Vector<float>(TargetDevice)),
+            m_accessor(accessor)
         {
             IsOk(cudaStreamCreate(&m_cudaStream));
         }
@@ -102,11 +105,21 @@ namespace NNano
             m_totalTrainingTime = 0;
         }
 
-        virtual void PrepareTraining(const std::vector<InputSample>& hostInputSamples, const std::vector<OutputSample>& hostTargetSamples) override final
+        virtual void PrepareTraining() override final
         {
-            AssertFmt(hostInputSamples.size() == hostTargetSamples.size(), "Size of input and target sample arrays does not match (%i != %i)", hostInputSamples.size(), hostTargetSamples.size());
+            const size_t trainingSize = m_accessor.TrainingSize();
+            std::vector<InputSample> hostInputSamples(trainingSize);
+            std::vector<OutputSample> hostTargetSamples(trainingSize);
 
-            const size_t ctxSize = sizeof(TrainingCtx<Policy>);
+            // Generate the training set
+            for (int idx = 0; idx < trainingSize; ++idx)
+            {
+                auto [input, target] = m_accessor.LoadTrainingSamplePair(idx);
+                hostInputSamples[idx] = input;
+                hostTargetSamples[idx] = target;
+            }
+
+                const size_t ctxSize = sizeof(TrainingCtx<Policy>);
             cudaDeviceProp prop;
             IsOk(cudaGetDeviceProperties(&prop, 0));
             AssertFmt(ctxSize < prop.sharedMemPerBlock - kSharedMemorySafeMargin, "Model context exceeds capacity of shared memory.");
@@ -115,9 +128,9 @@ namespace NNano
             printf_red("Model size: %i parameters\n", Model::kNumParams);
 
             m_computeGradData.reset(new Cuda::Vector<float>(TargetDevice, MiniBatchSize * Policy::Model::kNumParams, 0.f));
-            m_computeTrainInputSamples.reset(new Cuda::Vector<InputSample>(TargetDevice, hostInputSamples.size()));
-            m_computeTrainOutputSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice, hostTargetSamples.size()));
-            m_computeTrainTargetSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice, hostTargetSamples.size()));
+            m_computeTrainInputSamples.reset(new Cuda::Vector<InputSample>(TargetDevice, trainingSize));
+            m_computeTrainOutputSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice, trainingSize));
+            m_computeTrainTargetSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice, trainingSize));
             m_computeSampleLosses.reset(new Cuda::Vector<float>(TargetDevice, MiniBatchSize));
             m_computeMiniBatchLoss.reset(new Cuda::Object<float>(TargetDevice));
 
@@ -201,7 +214,7 @@ namespace NNano
             m_computeInferOutputSamples.reset();
         }
 
-        virtual void Infer(DataAccessor<InputSample, OutputSample>& accessor) override final
+        virtual void Infer() override final
         {
             AssertFmt(!m_computeModelData->IsEmpty(), "Model has not been initialised. Run a training cycle or load pre-trained weights first.");
             AssertFmt(m_computeInferInputSamples, "Inference has not been initialised. Call PrepareInference() first. ");
@@ -216,13 +229,14 @@ namespace NNano
             kernelData.mlpModelData = m_computeModelData->GetComputeData();
 
             // Process the samples in batches
-            for (int sampleIdx = 0; sampleIdx < accessor.Size(); sampleIdx += m_computeInferInputSamples->Size())
-            {          
+            const size_t inferenceSize = m_accessor.InferenceSize();
+            for (int sampleIdx = 0; sampleIdx < inferenceSize; sampleIdx += m_computeInferInputSamples->Size())
+            {
                 // Load a batch of samples from the accessor
                 hostInputSamples.clear();
-                for (int batchIdx = 0; batchIdx < MiniBatchSize && sampleIdx + batchIdx < accessor.Size(); ++batchIdx)
+                for (int batchIdx = 0; batchIdx < MiniBatchSize && sampleIdx + batchIdx < inferenceSize; ++batchIdx)
                 {
-                    hostInputSamples.push_back(accessor.Load(sampleIdx + batchIdx));
+                    hostInputSamples.push_back(m_accessor.LoadInferenceInputSample(sampleIdx + batchIdx));
                 }
                 hostOutputSamples.resize(hostInputSamples.size());
 
@@ -237,9 +251,9 @@ namespace NNano
 
                 // Store the output samples 
                 hostOutputSamples <<= *m_computeInferOutputSamples;
-                for (int batchIdx = 0; batchIdx < accessor.Size(); ++batchIdx)
+                for (int batchIdx = 0; batchIdx < hostOutputSamples.size(); ++batchIdx)
                 {
-                    accessor.Store(sampleIdx + batchIdx, hostOutputSamples[batchIdx]);
+                    m_accessor.StoreInferenceOutputSample(sampleIdx + batchIdx, hostOutputSamples[batchIdx]);
                 }
             }
         }

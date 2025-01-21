@@ -10,9 +10,12 @@ namespace NNano
     public:
         __host__ DataAccessor() = default;
 
-        __host__ virtual size_t Size() const = 0;
-        __host__ virtual InputSample Load(const int idx) = 0;
-        __host__ virtual void Store(const int idx, const OutputSample& sample) = 0;
+        __host__ virtual size_t TrainingSize() const = 0;
+        __host__ virtual std::pair<InputSample, OutputSample> LoadTrainingSamplePair(const int idx) = 0;
+        
+        __host__ virtual size_t InferenceSize() const = 0;
+        __host__ virtual InputSample LoadInferenceInputSample(const int idx) = 0;
+        __host__ virtual void StoreInferenceOutputSample(const int idx, const OutputSample& sample) = 0;
     };
     
     template<typename InputSample, typename OutputSample>
@@ -23,11 +26,11 @@ namespace NNano
 
     public:
         __host__ virtual void ResetTraining() = 0;
-        __host__ virtual void PrepareTraining(const std::vector<InputSample>& hostInputSamples, const std::vector<OutputSample>& hostTargetSamples) = 0;
+        __host__ virtual void PrepareTraining() = 0;
         __host__ virtual void TrainEpoch() = 0;
 
         __host__ virtual void ResetInference() = 0;
         __host__ virtual void PrepareInference(const int inferBatchSize) = 0;
-        __host__ virtual void Infer(DataAccessor<InputSample, OutputSample>& accessor) = 0;
+        __host__ virtual void Infer() = 0;
     };
 }
