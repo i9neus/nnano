@@ -57,7 +57,7 @@ namespace NNano
         int*                                    sampleIdxs = nullptr;
         float*                                  sampleLosses = nullptr;
         float*                                  miniBatchLoss = nullptr;
-        int                                     batchSize = 0;
+        int                                     setSize = 0;
     };
 
     template<typename Policy>
@@ -68,7 +68,7 @@ namespace NNano
         float*                                  mlpModelData = nullptr;
         Tensor1D<Policy::Model::kInputWidth>*   inputSamples = nullptr;
         Tensor1D<Policy::Model::kOutputWidth>*  outputSamples = nullptr;
-        int                                     batchSize = 0;
+        int                                     setSize = 0;
     };
 
     template<typename PolicyT>
@@ -99,6 +99,6 @@ namespace NNano
         float                                           mlpData[Policy::Model::kNumParams];
         Tensor1D<Policy::Model::kMaxWidth, false>       state, error;
         Scratchpad<float, Policy::Model::kMaxConcurrency>  scratch;
-        int                                             batchSize;
+        int                                             setSize;
     };   
 }

@@ -50,7 +50,7 @@ namespace NNano
         using Evaluator = typename Policy::Evaluator;
 
         // If the element of the mini-batch overruns the batch size
-        if (miniBatchOffset + kBlockIdx >= kernelData.batchSize) { return; }
+        if (miniBatchOffset + kBlockIdx >= kernelData.setSize) { return; }
             
         // Copy MLP data out of global memory into shared memory. 
         for (int paramIdx = kThreadIdx; paramIdx < Model::kNumParams; paramIdx += kBlockDim)
@@ -106,7 +106,7 @@ namespace NNano
         const int destIdx = (kKernelIdx / Policy::Model::kNumParams) * stride;
         const int srcIdx = destIdx + (stride >> 1);
 
-        if (destIdx < kMiniBatchSize && srcIdx < kMiniBatchSize && miniBatchOffset + srcIdx < kernelData.batchSize)
+        if (destIdx < kMiniBatchSize && srcIdx < kMiniBatchSize && miniBatchOffset + srcIdx < kernelData.setSize)
         {
             const int paramIdx = kKernelIdx % Policy::Model::kNumParams;
             kernelData.mlpGradData[destIdx * Policy::Model::kNumParams + paramIdx] += kernelData.mlpGradData[srcIdx * Policy::Model::kNumParams + paramIdx];
@@ -119,7 +119,7 @@ namespace NNano
             // On the last reduce, average the accumulated gradients.
             if (stride == kMiniBatchSize) 
             { 
-                const auto N = min(kMiniBatchSize, kernelData.batchSize - miniBatchOffset);
+                const auto N = min(kMiniBatchSize, kernelData.setSize - miniBatchOffset);
                 kernelData.mlpGradData[destIdx * Policy::Model::kNumParams + paramIdx] /= N; 
 
                 if (paramIdx == 0)
@@ -174,7 +174,7 @@ namespace NNano
             EstimateGradientsKernel << < Policy::Hyper::kMiniBatchSize, Policy::Model::kMaxConcurrency, 0, stream >> > (kernelData, miniBatchOffset);// , ctx.GetComputeData());
             //IsOk(cudaGetLastError());
 
-            const int kMiniBatchSize = std::min(int(Policy::Hyper::kMiniBatchSize), kernelData.batchSize - miniBatchOffset);
+            const int kMiniBatchSize = std::min(int(Policy::Hyper::kMiniBatchSize), kernelData.setSize - miniBatchOffset);
             ReduceLossKernel << < 1, kMiniBatchSize, 0, stream >> > (kernelData);
         }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/cuda/CudaUtils.cuh"
+#include "../core/cuda/CudaVector.cuh"
 
 namespace NNano
 {    
@@ -10,27 +11,27 @@ namespace NNano
     public:
         __host__ DataAccessor() = default;
 
-        __host__ virtual size_t TrainingSize() const = 0;
-        __host__ virtual std::pair<InputSample, OutputSample> LoadTrainingSamplePair(const int idx) = 0;
-        
-        __host__ virtual size_t InferenceSize() const = 0;
-        __host__ virtual InputSample LoadInferenceInputSample(const int idx) = 0;
-        __host__ virtual void StoreInferenceOutputSample(const int idx, const OutputSample& sample) = 0;
+        __host__ virtual int LoadTrainingSet(Cuda::Vector<InputSample>&, Cuda::Vector<OutputSample>&) = 0;
+        __host__ virtual int LoadInferenceBatch(Cuda::Vector<InputSample>&, const int startIdx) = 0;
+        __host__ virtual void StoreInferenceBatch(const Cuda::Vector<OutputSample>&, const int startIdx) = 0;
     };
     
     template<typename InputSample, typename OutputSample>
-    class ModelInterface
+    class NNModel
     {
     protected:
-        __host__ ModelInterface() = default;
+        cudaStream_t                                    m_cudaStream;
+
+    protected:
+        __host__ NNModel(cudaStream_t stream) :
+            m_cudaStream(stream) {}
 
     public:
-        __host__ virtual void ResetTraining() = 0;
+        __host__ cudaStream_t GetCudaStream() const { return m_cudaStream; }
+
         __host__ virtual void PrepareTraining() = 0;
         __host__ virtual void TrainEpoch() = 0;
 
-        __host__ virtual void ResetInference() = 0;
-        __host__ virtual void PrepareInference(const int inferBatchSize) = 0;
         __host__ virtual void Infer() = 0;
     };
 }

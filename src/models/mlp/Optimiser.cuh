@@ -130,7 +130,7 @@ namespace NNano
         {
             static_assert((Policy::Hyper::kMiniBatchSize & (Policy::Hyper::kMiniBatchSize - 1)) == 0, "Mini-batch size must be a power of 2");
 
-            const int kMiniBatchSize = std::min(int(Policy::Hyper::kMiniBatchSize), kernelData.batchSize - miniBatchOffset);
+            const int kMiniBatchSize = std::min(int(Policy::Hyper::kMiniBatchSize), kernelData.setSize - miniBatchOffset);
             constexpr int kNumThreads = 256;
             constexpr int kNumBlocks = (Policy::Hyper::kMiniBatchSize * Policy::Model::kNumParams + (kNumThreads - 1)) / kNumThreads;
 

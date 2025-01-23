@@ -15,7 +15,7 @@ namespace NNano
         using Evaluator = typename Policy::Evaluator;
 
         // If the element of the mini-batch overruns the batch size
-        if (kBlockIdx >= kernelData.batchSize) { return; }
+        if (kBlockIdx >= kernelData.setSize) { return; }
 
         // Copy MLP data out of global memory into shared memory. 
         for (int paramIdx = kThreadIdx; paramIdx < Model::kNumParams; paramIdx += kBlockDim)
@@ -23,10 +23,10 @@ namespace NNano
             ctx.mlpData[paramIdx] = kernelData.mlpModelData[paramIdx];
         }
 
-        ctx.batchSize = kernelData.batchSize;
+        ctx.setSize = kernelData.setSize;
 
         // Progress sample by sample
-        for (int sampleIdx = kBlockIdx; sampleIdx < ctx.batchSize; sampleIdx += Policy::Hyper::kMiniBatchSize)
+        for (int sampleIdx = kBlockIdx; sampleIdx < ctx.setSize; sampleIdx += Policy::Hyper::kMiniBatchSize)
         {
             // Copy input/target samples into memory
             __syncthreads();
@@ -70,7 +70,7 @@ namespace NNano
             TrainingCtx<Policy> ctx;
             std::memcpy(ctx.mlpData, kernelData.mlpModelData, Policy::Model::kNumParams * sizeof(float));
 
-            for (int sampleIdx = 0; sampleIdx < kernelData.batchSize; ++sampleIdx)
+            for (int sampleIdx = 0; sampleIdx < kernelData.setSize; ++sampleIdx)
             {
                 ctx.state = kernelData.inputSamples[sampleIdx];
 
