@@ -47,6 +47,20 @@ namespace NNano
     struct TrainingKernelData
     {           
         __device__ __host__ STANDARD_TYPE_CHECK_CTOR(TrainingKernelData)
+
+        __host__ void Validate() const
+        {
+            Assert(mlpModelData); 
+            Assert(mlpGradData);
+            Assert(inputSamples);
+            Assert(outputSamples);
+            Assert(targetSamples);
+            Assert(optimiserData);
+            Assert(sampleIdxs);
+            Assert(sampleLosses);
+            Assert(miniBatchLoss);
+            Assert(setSize > 0);
+        }
             
         float*                                  mlpModelData = nullptr;
         float*                                  mlpGradData = nullptr;

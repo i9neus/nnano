@@ -58,6 +58,7 @@ namespace NNano
             AssertFmt(kNumThreads <= 1024, "Exceeded block limit of 1024 threads");
             InferBatchKernel<kNumThreads> << < Policy::Hyper::kMiniBatchSize, kNumThreads, 0, stream >> > (kernelData);
             IsOk(cudaGetLastError());
+            IsOk(cudaStreamSynchronize(stream));
         }
     };
 

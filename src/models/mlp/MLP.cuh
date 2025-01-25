@@ -25,6 +25,13 @@
 
 namespace NNano
 {
+    struct MLPStats
+    {
+        int numEpochs;
+        int numMiniBatches;
+        float loss;
+    };
+    
     template<typename Model, 
                 typename ModelInitialiser, 
                 typename ActivationFunction, 
@@ -51,16 +58,17 @@ namespace NNano
             kMaxMiniBatches = std::numeric_limits<int>::max()
         };
 
-    private:            
+    private:
         std::unique_ptr<Cuda::Vector<float>>            m_computeModelData;
+        std::unique_ptr<Cuda::Vector<float>>            m_computeOptimiserData;
         std::unique_ptr<Cuda::Vector<float>>            m_computeGradData;
         std::unique_ptr<Cuda::Vector<float>>            m_computeSampleLosses;
         std::unique_ptr<Cuda::Object<float>>            m_computeMiniBatchLoss;
-        std::unique_ptr<Cuda::Vector<InputSample>>      m_computeTrainInputSamples;
+        std::shared_ptr<Cuda::Vector<InputSample>>      m_computeTrainInputSamples;
         std::unique_ptr<Cuda::Vector<OutputSample>>     m_computeTrainOutputSamples;
-        std::unique_ptr<Cuda::Vector<OutputSample>>     m_computeTrainTargetSamples;
+        std::shared_ptr<Cuda::Vector<OutputSample>>     m_computeTrainTargetSamples;
         std::unique_ptr<Permutation>                    m_sampleIdxs;
-         
+
         std::unique_ptr<Cuda::Vector<InputSample>>      m_computeInferInputSamples;
         std::unique_ptr<Cuda::Vector<OutputSample>>     m_computeInferOutputSamples;
         int                                             m_inferenceBatchSize;
@@ -71,53 +79,58 @@ namespace NNano
         std::vector<float>                              m_miniBatchLoss;
         double                                          m_totalTrainingTime;
         int                                             m_epochIdx;
+        int                                             m_miniBatchIdx;
 
         HighResTimer                                    m_kernelTimer;
 
         using AccessorType = DataAccessor<InputSample, OutputSample>;
-        AccessorType&                                   m_accessor;
+        AccessorType& m_accessor;
 
     public:
         MLP(AccessorType& accessor, cudaStream_t stream = nullptr) :
             NNModel<InputSample, OutputSample>(stream),
             m_accessor(accessor)
         {
-            // Determininstically initialise the model weights using the specified initailiser
-            std::vector<float> hostModelData(Model::kNumParams);
-            auto rng = ModelInitialiser();
-            Model::Initialise(hostModelData, rng);
-            
+            // Model data
             m_computeModelData.reset(new Cuda::Vector<float>(TargetDevice));
-            *m_computeModelData <<= hostModelData;
 
-            m_computeInferInputSamples.reset(new Cuda::Vector<InputSample>(TargetDevice));
-            m_computeInferOutputSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice));
-
-            m_computeGradData.reset(new Cuda::Vector<float>(TargetDevice));
+            // Training data
             m_computeTrainInputSamples.reset(new Cuda::Vector<InputSample>(TargetDevice));
             m_computeTrainOutputSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice));
             m_computeTrainTargetSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice));
             m_computeSampleLosses.reset(new Cuda::Vector<float>(TargetDevice));
             m_computeMiniBatchLoss.reset(new Cuda::Object<float>(TargetDevice));
+            m_computeGradData.reset(new Cuda::Vector<float>(TargetDevice));
+            m_computeOptimiserData.reset(new Cuda::Vector<float>(TargetDevice));
+            m_sampleIdxs.reset(new Permutation(TargetDevice, m_cudaStream));
+
+            // Inference data
+            m_computeInferInputSamples.reset(new Cuda::Vector<InputSample>(TargetDevice));
+            m_computeInferOutputSamples.reset(new Cuda::Vector<OutputSample>(TargetDevice));
         }
 
         ~MLP() {}
 
-        virtual void PrepareTraining() override final
+        __host__ virtual std::pair< std::shared_ptr<Cuda::Vector<InputSample>>, std::shared_ptr<Cuda::Vector<OutputSample>>> GetTrainingDataObjects() override final
+        {
+            return { m_computeTrainInputSamples, m_computeTrainTargetSamples };
+        }
+
+        virtual void Initialise() override final
         {
             m_epochLoss.clear();
             m_miniBatchLoss.clear();
             m_epochIdx = 0;
+            m_miniBatchIdx = 0;
             m_totalTrainingTime = 0;
-            
-            // Generate the training set
-            const auto trainingSize = m_accessor.LoadTrainingSet(*m_computeTrainInputSamples, *m_computeTrainTargetSamples);
-            
-            Assert(trainingSize);
-            AssertFmt(trainingSize == m_computeTrainInputSamples->Size() && m_computeTrainInputSamples->Size() == m_computeTrainTargetSamples->Size(), "Size mismatch!");
-            AssertFmt(m_computeTrainInputSamples->GetComputeDevice() == TargetDevice && 
-                      m_computeTrainTargetSamples->GetComputeDevice() == TargetDevice, "Wrong compute device!");
 
+            // Determininstically initialise the model weights using the specified initailiser
+            std::vector<float> hostModelData(Model::kNumParams);
+            auto rng = ModelInitialiser();
+            Model::Initialise(hostModelData, rng);
+            *m_computeModelData <<= hostModelData;
+
+            // Check that the model fits in shared memory
             const size_t ctxSize = sizeof(TrainingCtx<Policy>);
             cudaDeviceProp prop;
             IsOk(cudaGetDeviceProperties(&prop, 0));
@@ -126,46 +139,64 @@ namespace NNano
             printf_red("TrainingCtx: %i bytes\n", ctxSize);
             printf_red("Model size: %i parameters\n", Model::kNumParams);
 
-            // Allocate memory
-            m_computeTrainInputSamples->Resize(trainingSize);
-            m_computeTrainOutputSamples->Resize(trainingSize);
-            m_computeTrainTargetSamples->Resize(trainingSize);
-            m_computeSampleLosses->Resize(MiniBatchSize);
-            m_computeGradData->Resize(MiniBatchSize * Policy::Model::kNumParams);
+            // Zero init the gradient data
+            m_computeSampleLosses->Resize(kMiniBatchSize);
+            m_computeGradData->Resize(kMiniBatchSize * Policy::Model::kNumParams);
             m_computeGradData->Fill(0.f);
 
-            // Create and initialise the optimiser
-            Cuda::Vector<float> computeOptimiserData(TargetDevice, Policy::Model::kNumParams * 2, 0.f);
+            // Initialise the optimiser
+            m_computeOptimiserData->Resize(Policy::Model::kNumParams * 2);
+            m_computeOptimiserData->Fill(0.f);
 
-            // Create random indirection buffer
-            m_sampleIdxs.reset(new Permutation(TargetDevice, m_cudaStream, m_computeTrainInputSamples->Size()));
-            m_sampleIdxs->Randomise();
-            //m_sampleIdxs->Sequential();
-
-            // Initialise the kernel data structure
+            // Populate the kernel data structure
             m_kernelData.mlpModelData = m_computeModelData->GetComputeData();
             m_kernelData.mlpGradData = m_computeGradData->GetComputeData();
-            m_kernelData.inputSamples = m_computeTrainInputSamples->GetComputeData();
-            m_kernelData.outputSamples = m_computeTrainOutputSamples->GetComputeData();
-            m_kernelData.targetSamples = m_computeTrainTargetSamples->GetComputeData();
-            m_kernelData.optimiserData = computeOptimiserData.GetComputeData();
-            m_kernelData.sampleIdxs = m_sampleIdxs->GetComputeData();
+            m_kernelData.optimiserData = m_computeOptimiserData->GetComputeData();
             m_kernelData.sampleLosses = m_computeSampleLosses->GetComputeData();
             m_kernelData.miniBatchLoss = m_computeMiniBatchLoss->GetComputeData();
-            m_kernelData.setSize = trainingSize;
+        }
+
+        // Called after intialising the training data but before training an epoch
+        virtual void PrepareTraining() override final
+        {
+            const auto trainingSize = m_computeTrainInputSamples->Size();
+            AssertFmt(trainingSize > 0, "No training data is specified. Set it with GetTrainingDataObjects().");
+            AssertFmt(m_computeTrainInputSamples->Size() == m_computeTrainTargetSamples->Size(), "Size mismatch!");
+            AssertFmt(m_computeTrainInputSamples->GetComputeDevice() == TargetDevice && m_computeTrainTargetSamples->GetComputeDevice() == TargetDevice, "Wrong compute device!");
+
+            m_computeTrainOutputSamples->Resize(trainingSize);
+
+            // If the training size hsa change, reinitialise the indirection buffer
+            if (m_sampleIdxs->Size() != trainingSize)
+            {
+                m_sampleIdxs->Randomise(trainingSize);
+                //m_sampleIdxs->Sequential(trainingSize);
+
+                m_kernelData.sampleIdxs = m_sampleIdxs->GetComputeData();
+            }
+        }    
+
+        // Shuffles the indirection buffer (called after each epoch)
+        virtual void Shuffle() override final 
+        {
+            m_sampleIdxs->Shuffle();
         }
 
         virtual void TrainEpoch() override final
         {
-            AssertFmt(m_computeGradData, "Training has not been initialised. Called PrepareTraining() first.");
-                
-            // Shuffle the indirection indices
-            m_sampleIdxs->Shuffle();
+            // Populate the kernel data structure
+            m_kernelData.inputSamples = m_computeTrainInputSamples->GetComputeData();
+            m_kernelData.outputSamples = m_computeTrainOutputSamples->GetComputeData();
+            m_kernelData.targetSamples = m_computeTrainTargetSamples->GetComputeData();           
+            m_kernelData.setSize = m_computeTrainInputSamples->Size();
+            m_kernelData.Validate();
+
+            AssertFmt(m_computeGradData, "Training has not been initialised. Called Prepare() first.");
+
             m_kernelTimer.Reset();
-                
+
             float meanLoss = 0;
-            int miniBatchIdx = 0;
-            for (int sampleIdx = 0; sampleIdx < m_kernelData.setSize && miniBatchIdx < kMaxMiniBatches; sampleIdx += MiniBatchSize, ++miniBatchIdx)
+            for (int sampleIdx = 0; sampleIdx < m_kernelData.setSize && m_miniBatchIdx < kMaxMiniBatches; sampleIdx += kMiniBatchSize, ++m_miniBatchIdx)
             {
                 m_computeGradData->Fill(0.f);
 
@@ -183,10 +214,10 @@ namespace NNano
                 m_miniBatchLoss.emplace_back(loss);
                 meanLoss += loss;
             }
-                
+
             // Record the epoch loss
-            meanLoss /= std::ceil(m_kernelData.setSize / float(MiniBatchSize));
-            m_epochLoss.emplace_back(miniBatchIdx, meanLoss);
+            meanLoss /= std::ceil(m_kernelData.setSize / float(kMiniBatchSize));
+            m_epochLoss.emplace_back(m_miniBatchIdx, meanLoss);
             m_totalTrainingTime += m_kernelTimer.Get();
             ++m_epochIdx;
         }
@@ -206,7 +237,6 @@ namespace NNano
                 const int numLoaded = m_accessor.LoadInferenceBatch(*m_computeInferInputSamples, sampleIdx);
                 if (numLoaded == 0) { break; }
 
-
                 // Prepare the kernel data
                 m_computeInferOutputSamples->Resize(numLoaded);
                 kernelData.setSize = numLoaded;
@@ -220,6 +250,26 @@ namespace NNano
                 m_accessor.StoreInferenceBatch(*m_computeInferOutputSamples, sampleIdx);
                 sampleIdx += numLoaded;
             }
+        }
+
+        std::pair<Cuda::Vector<InputSample>*, Cuda::Vector<OutputSample>*> GetTrainingSet()
+        {
+            return { m_computeTrainInputSamples.get(), m_computeTrainTargetSamples.get() };
+        }
+
+        Cuda::Vector<InputSample>* GetInferenceSet()
+        {
+            return m_computeInferInputSamples.get();
+        }
+
+        MLPStats GetStats()
+        {
+            MLPStats stats;
+            stats.numEpochs = m_epochIdx;
+            stats.numMiniBatches = m_miniBatchIdx;
+            stats.loss = m_epochLoss.empty() ? -kFltMax : m_epochLoss.back().second;
+            
+            return stats;
         }
     }; 
 }

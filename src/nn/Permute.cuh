@@ -51,17 +51,25 @@ namespace NNano
         std::uniform_int_distribution<int>          m_rng;
         cudaStream_t                                m_cudaStream;
 
+    private:
+        __host__ void Resize(const int newSize)
+        {
+            m_hostIndices.resize(newSize);
+            m_computeIndices.Resize(newSize);
+        }
+
     public:
-        Permutation(const ComputeDevice targetDevice, cudaStream_t stream, const int size, const uint32_t seed = 0) :
+        Permutation(const ComputeDevice targetDevice, cudaStream_t stream, const int size = 0, const uint32_t seed = 0) :
             m_mt(seed),
             m_hostIndices(size),
-            m_computeIndices(targetDevice),
+            m_computeIndices(targetDevice, size),
             m_swap(targetDevice, size),
             m_cudaStream(stream)
         {
-            m_computeIndices <<= m_hostIndices;
-            m_hostIndices <<= m_computeIndices;
+
         }
+
+        __host__ inline size_t Size() const { return m_hostIndices.size(); }
 
         __host__ std::vector<int>& GetHostData()
         {
@@ -87,8 +95,10 @@ namespace NNano
             printf_green("Map is bijective!\n");
         }
 
-        __host__ void Randomise()
+        __host__ void Randomise(const int size)
         {
+            Resize(size);
+            
             // Fill array with sequential integers
             for (int i = 0; i < m_hostIndices.size(); ++i) { m_hostIndices[i] = i; }
 
@@ -103,14 +113,16 @@ namespace NNano
             m_computeIndices <<= m_hostIndices;
         }
 
-        __host__ void Sequential()
+        __host__ void Sequential(const int size)
         {
+            Resize(size);
+            
             if (m_computeIndices.IsCUDA())
             {
                 const int kNumBlocks = (m_computeIndices.Size() + 255) / 256;
                 FillSequentialKernel << <kNumBlocks, 256, 0, m_cudaStream >> > (m_computeIndices.GetComputeData(), m_computeIndices.Size());
                 IsOk(cudaGetLastError());
-                IsOk(cudaDeviceSynchronize());
+                IsOk(cudaStreamSynchronize(m_cudaStream));
             }
             else
             {
@@ -128,7 +140,7 @@ namespace NNano
                 const int kNumBlocks = (m_computeIndices.Size() + 255) / 256;
                 ShuffleKernel << < kNumBlocks, 256, 0, m_cudaStream >> > (m_swap.GetComputeData(), m_computeIndices.GetComputeData(), m_computeIndices.Size(), offset);
                 IsOk(cudaGetLastError());
-                IsOk(cudaDeviceSynchronize());
+                IsOk(cudaStreamSynchronize(m_cudaStream));
             }
             else
             {

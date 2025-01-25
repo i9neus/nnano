@@ -11,7 +11,6 @@ namespace NNano
     public:
         __host__ DataAccessor() = default;
 
-        __host__ virtual int LoadTrainingSet(Cuda::Vector<InputSample>&, Cuda::Vector<OutputSample>&) = 0;
         __host__ virtual int LoadInferenceBatch(Cuda::Vector<InputSample>&, const int startIdx) = 0;
         __host__ virtual void StoreInferenceBatch(const Cuda::Vector<OutputSample>&, const int startIdx) = 0;
     };
@@ -29,8 +28,12 @@ namespace NNano
     public:
         __host__ cudaStream_t GetCudaStream() const { return m_cudaStream; }
 
+        __host__ virtual std::pair< std::shared_ptr<Cuda::Vector<InputSample>>, std::shared_ptr<Cuda::Vector<OutputSample>>> GetTrainingDataObjects() = 0;
+
+        __host__ virtual void Initialise() = 0;
         __host__ virtual void PrepareTraining() = 0;
         __host__ virtual void TrainEpoch() = 0;
+        __host__ virtual void Shuffle() {}
 
         __host__ virtual void Infer() = 0;
     };
